@@ -1,0 +1,18 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Local raw/cleaned image datasets (too large for GitHub)
+data/cleaned_pcos/
+data/pcos-xai-ultrasound-dataset/
+
+# Large models (> 100 MB, which GitHub rejects)
+*.h5
