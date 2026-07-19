@@ -1,0 +1,21 @@
+# Core PyTorch Deep Learning
+torch
+torchvision
+
+# Dataset Download API
+kagglehub
+
+# Image & Data Processing
+numpy
+opencv-python
+pillow
+
+# ONNX Optimization & Runtime Execution
+onnx
+onnxruntime
+
+# Telemetry & Benchmarking
+psutil
+
+# Legacy Keras/H5 Model Support
+tensorflow-cpu
