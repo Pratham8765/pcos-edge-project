@@ -17,5 +17,9 @@ onnxruntime
 # Telemetry & Benchmarking
 psutil
 
+# Evaluation & Visualisation
+scikit-learn
+matplotlib
+
 # Legacy Keras/H5 Model Support
 tensorflow-cpu

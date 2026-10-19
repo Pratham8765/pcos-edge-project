@@ -1,0 +1,104 @@
+{
+  "cpu": "13th Gen Intel(R) Core(TM) i5-13420H",
+  "test_samples": 401,
+  "majority_baseline": {
+    "majority_class": "infected",
+    "accuracy": 78.3042,
+    "class_counts": {
+      "infected": 314,
+      "noninfected": 87
+    }
+  },
+  "models": [
+    {
+      "accuracy": 91.5212,
+      "confusion_matrix": [
+        [
+          308,
+          6
+        ],
+        [
+          28,
+          59
+        ]
+      ],
+      "per_class": {
+        "infected": {
+          "precision": 0.9167,
+          "recall": 0.9809,
+          "f1": 0.9477
+        },
+        "noninfected": {
+          "precision": 0.9077,
+          "recall": 0.6782,
+          "f1": 0.7763
+        }
+      },
+      "roc_auc": 0.9759,
+      "latency_ms_mean": 29.78,
+      "latency_ms_std": 0.63,
+      "size_mb": 42.69,
+      "model": "ResNet18 (PyTorch .pth)"
+    },
+    {
+      "accuracy": 91.5212,
+      "confusion_matrix": [
+        [
+          308,
+          6
+        ],
+        [
+          28,
+          59
+        ]
+      ],
+      "per_class": {
+        "infected": {
+          "precision": 0.9167,
+          "recall": 0.9809,
+          "f1": 0.9477
+        },
+        "noninfected": {
+          "precision": 0.9077,
+          "recall": 0.6782,
+          "f1": 0.7763
+        }
+      },
+      "roc_auc": 0.9759,
+      "latency_ms_mean": 12.03,
+      "latency_ms_std": 0.65,
+      "size_mb": 42.61,
+      "model": "ResNet18 ONNX"
+    },
+    {
+      "accuracy": 92.2693,
+      "confusion_matrix": [
+        [
+          309,
+          5
+        ],
+        [
+          26,
+          61
+        ]
+      ],
+      "per_class": {
+        "infected": {
+          "precision": 0.9224,
+          "recall": 0.9841,
+          "f1": 0.9522
+        },
+        "noninfected": {
+          "precision": 0.9242,
+          "recall": 0.7011,
+          "f1": 0.7974
+        }
+      },
+      "roc_auc": 0.9796,
+      "latency_ms_mean": 3.84,
+      "latency_ms_std": 0.25,
+      "size_mb": 10.69,
+      "model": "ResNet18 ONNX quantized"
+    }
+  ]
+}

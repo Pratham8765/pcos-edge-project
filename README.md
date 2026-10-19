@@ -1,48 +1,59 @@
 # PCOS Image Classification and Edge Deployment
 
-CNN-based image classifier for PCOS ultrasound images, trained in TensorFlow and PyTorch (ResNet18), then exported to ONNX and quantized for lightweight CPU inference.
+CNN-based classifier for PCOS ultrasound images, trained in PyTorch (ResNet18) with a TensorFlow baseline, then exported to ONNX and INT8-quantized for lightweight CPU inference.
 
 > **Disclaimer:** Educational project on a public dataset. Not a medical device and not clinically validated.
 
 ## Problem
 
-Polycystic Ovary Syndrome (PCOS) is typically identified from ovarian ultrasound images, but expert review is slow and access is uneven. This project explores whether a compact, quantized model can deliver reliable classification fast enough for edge or resource-constrained deployments, where a large TensorFlow model would be impractical.
+PCOS is typically identified from ovarian ultrasound images, but expert review is slow and access is uneven. This project explores whether a compact, quantized model can deliver reasonably accurate classification fast enough for edge or resource-constrained deployments, where a large TensorFlow model would be impractical.
 
 ## Dataset
 
-- **Source:** [PCOS-XAI Ultrasound: Real-World Training Dataset](https://www.kaggle.com/datasets/ibadeus/pcos-xai-ultrasound-dataset) (Kaggle), **License: CC0 Public Domain**
-- **Raw images:** 11,784 ultrasound images (intentionally uncleaned — duplicates, mixed resolutions, naming inconsistencies)
-- **After deduplication:** 3,996 unique images via MD5 hashing; classes: `infected` (PCOS-positive): 3,184 · `noninfected` (healthy): 812
-- **Split:** 80 / 10 / 10 → Train 3,196 / Val 399 / Test 401 samples
-- **Split method:** Stratified-random by image (`torch.Generator(seed=42).random_split`). No patient identifiers exist in the dataset (DICOM metadata stripped). Patient-level split was not possible.
-- **Preprocessing & augmentation:** Images resized to 256×256 and converted to grayscale. Training split only: random horizontal/vertical flip, ±15° rotation, minor brightness/contrast jitter. Validation and test splits: resize + grayscale only. **Augmentation was applied after the train/val/test split** — no augmented copies appear in the test set.
+- **Source:** [PCOS-XAI Ultrasound Dataset](https://www.kaggle.com/datasets/ibadeus/pcos-xai-ultrasound-dataset) (Kaggle), CC0 Public Domain
+- **Raw images:** 11,784 (duplicates, mixed resolutions, inconsistent naming)
+- **After MD5 deduplication:** 3,996 images. PCOS-positive (`infected` folder): 3,184. PCOS-negative (`noninfected` folder): 812
+- **Split:** 80/10/10 → Train 3,196 / Val 399 / Test 401
+- **Split method:** stratified-random by image (`seed=42`). The dataset has no patient identifiers, so a patient-level split was not possible.
+- **Preprocessing:** resize to 256×256, grayscale. Training-only augmentation (flips, ±15° rotation, brightness/contrast jitter), applied after the split.
 
 ## Approach
 
-1. **Baseline CNN in TensorFlow** — custom convolutional model (`cyst_detection_final_savedmodel.h5`) evaluated on a separate 382-sample hold-out
-2. **ResNet18 in PyTorch** — ImageNet-pretrained backbone adapted for single-channel (grayscale) input; backbone frozen, only `conv1` and the classification head fine-tuned; 15 epochs, Adam (lr=1e-4, weight_decay=1e-4)
-3. **Exported to ONNX**, then **dynamically quantized to INT8** via ONNX Runtime's built-in quantization
-4. **Packaged with Docker** — inference-only container (no PyTorch/TensorFlow) with hard resource limits: 0.5 CPU cores, 256 MB RAM
+1. **TensorFlow baseline:** custom CNN, evaluated on a separate 382-sample hold-out
+2. **ResNet18 (PyTorch):** ImageNet-pretrained, adapted to grayscale. Backbone frozen; `conv1` and the head fine-tuned. 15 epochs, Adam (lr=1e-4, weight_decay=1e-4)
+3. **ONNX export, then dynamic INT8 quantization** with ONNX Runtime
+4. **Docker:** inference-only container limited to 0.5 CPU and 256 MB RAM
 
 ## Results (test set, 401 samples)
 
-| Model | Accuracy | Size (MB) | CPU latency (ms) |
-|---|---|---|---|
-| TensorFlow baseline | 99.74% | 169.86 | 121.57 |
-| ResNet18 (PyTorch .pth) | 91.52% | 42.69 | 33.36 |
-| ResNet18 ONNX | 91.52% | 42.61 | 15.42 |
-| ResNet18 ONNX quantized | 92.27% | 10.69 | **4.55** |
+Majority-class baseline (always predict PCOS-positive): **78.30%**
 
-Latency measured on **Intel Core i5-13420H** over 50 single-sample runs (5-run warm-up discarded).  
-*Note: the TF baseline used a separate 382-sample split; the three PyTorch models share the same 401-sample test split.*
+| Model | Accuracy | PCOS-positive P / R / F1 | PCOS-negative P / R / F1 | ROC-AUC | CPU latency (ms) | Size (MB) |
+|---|---|---|---|---|---|---|
+| ResNet18 (PyTorch .pth) | 91.52% | 0.917 / 0.981 / 0.948 | 0.908 / 0.678 / 0.776 | 0.9759 | 29.78 ± 0.63 | 42.69 |
+| ResNet18 ONNX | 91.52% | 0.917 / 0.981 / 0.948 | 0.908 / 0.678 / 0.776 | 0.9759 | 12.03 ± 0.65 | 42.61 |
+| ResNet18 ONNX INT8 | 92.27% | 0.922 / 0.984 / 0.952 | 0.924 / 0.701 / 0.797 | 0.9796 | 3.84 ± 0.25 | 10.69 |
+| TensorFlow baseline | not comparable (different split) | n/a | n/a | n/a | 121.57 | 169.86 |
+
+**Reading the results:** the model catches about 98% of PCOS-positive scans but misclassifies about a third of healthy scans (PCOS-negative recall 0.678). The data is roughly 80% PCOS-positive and no re-balancing was applied, so the default 0.5 threshold favors the positive class. Differences under 1 point between the float and quantized models are within noise on 401 images.
+
+Latency: Intel Core i5-13420H, 50 single-sample runs after 5 warm-up runs, measured on the host (Docker not installed at time of measurement; container-constrained latency not measured). All rows come from the same machine and session.
 
 ## Limitations
 
-- **Test set is small (401 samples):** one misclassification shifts accuracy by ~0.25%. Results should be treated as indicative, not definitive.
-- **No patient-level split:** the dataset ships with no patient metadata (DICOM stripped). The random image-level split means images from the same source study could appear in both train and test, potentially inflating accuracy.
-- **Class imbalance:** the cleaned dataset is ~80% infected / ~20% non-infected; no re-balancing was applied during training.
-- **TF vs. PyTorch accuracy gap:** the TF baseline's 99.74% was measured on a different (382-sample) hold-out created during a separate training run and is not directly comparable to the 91.52% measured here.
-- Public dataset with no clinical validation — not suitable for medical decision-making.
+- **Small test set (401):** one error shifts accuracy by about 0.25%.
+- **No patient-level split:** images from the same source study may appear in both train and test, which could inflate results.
+- **Near-duplicates:** MD5 removes only byte-identical files; resized or re-encoded copies may remain across splits.
+- **Class imbalance:** about 80/20, with no re-balancing during training. Weak PCOS-negative recall reflects this.
+- **TensorFlow baseline:** its 99.74% was measured on a different 382-sample hold-out and is kept for size and latency reference only, not as an accuracy comparison.
+- Public dataset, not clinically validated. Not for medical decisions.
+
+## Future work
+
+- Class weighting or focal loss to improve PCOS-negative recall
+- Tune the decision threshold on the validation set only, then report test results once
+- Unfreeze more ResNet18 layers
+- Patient-level validation if metadata becomes available
 
 ## How to run
 
@@ -50,19 +61,27 @@ Latency measured on **Intel Core i5-13420H** over 50 single-sample runs (5-run w
 git clone https://github.com/Pratham8765/pcos-edge-project.git
 cd pcos-edge-project
 pip install -r requirements.txt
-
-# Train ResNet18 (downloads & cleans dataset via KaggleHub automatically)
-python src/train.py
-
-# Benchmark all models on the fixed test set
-python src/benchmark.py
+python src/train.py        # downloads and cleans the dataset via KaggleHub
+python src/benchmark.py    # evaluates all models on the fixed test set
 ```
 
-Docker (edge sandbox — 0.5 CPU, 256 MB RAM):
+The first run of `train.py` needs Kaggle credentials (`KAGGLE_USERNAME` and `KAGGLE_KEY`, or `~/.kaggle/kaggle.json`).
+
+`train.py` saves weights as `pcos_resnet18.pth`. The committed file `pcos_resnet18_production.pth` is that output manually renamed; `benchmark.py` looks for `pcos_resnet18_production.pth` first, then falls back to `pcos_resnet18.pth`.
+
+**Docker edge sandbox (Windows PowerShell)** — *commands not tested; Docker was unavailable at time of writing*
+```powershell
+docker build -t pcos-edge .
+docker run --rm --cpus="0.5" --memory="256m" `
+  -v "${PWD}/pcos_resnet18.onnx:/pcos_resnet18.onnx" `
+  -v "${PWD}/pcos_resnet18_quant.onnx:/pcos_resnet18_quant.onnx" `
+  -v "${PWD}/data/cleaned_pcos:/data/cleaned_pcos" `
+  -v "${PWD}/data/test_files.txt:/data/test_files.txt" `
+  pcos-edge
+```
+
+**Docker edge sandbox (Linux / macOS)** — *commands not tested; Docker was unavailable at time of writing*
 ```bash
-# Requires: pcos_resnet18.onnx, pcos_resnet18_quant.onnx, data/cleaned_pcos/, data/test_files.txt
-./run_sandbox.ps1
-# or manually:
 docker build -t pcos-edge .
 docker run --rm --cpus="0.5" --memory="256m" \
   -v "$PWD/pcos_resnet18.onnx:/pcos_resnet18.onnx" \
@@ -72,27 +91,16 @@ docker run --rm --cpus="0.5" --memory="256m" \
   pcos-edge
 ```
 
-> **Kaggle credentials required** for the first run of `train.py` (dataset download via `kagglehub`). Set `KAGGLE_USERNAME` and `KAGGLE_KEY` environment variables or place `~/.kaggle/kaggle.json`.
-
 ## Repository structure
 
-- `src/`
-  - `clean_data.py` — downloads dataset via KaggleHub, removes duplicates by MD5 hash, outputs `data/cleaned_pcos/`
-  - `dataset.py` — PyTorch `DataLoader` factory with train/val/test split and per-split transforms
-  - `model.py` — `PCOSResNet18`: grayscale-adapted ResNet18 with dropout head
-  - `train.py` — training loop (15 epochs, Adam), saves `pcos_resnet18.pth`
-  - `benchmark.py` — evaluates .pth, ONNX, and quantized ONNX; reports accuracy, size, and latency
-- `data/`
-  - `cleaned_pcos/` — deduplicated images (created locally by `clean_data.py`; not committed to git)
-  - `test_files.txt` — fixed list of 401 test-set filenames + labels for reproducible evaluation
-- `pcos_resnet18_production.pth` — trained PyTorch weights (42.69 MB)
-- `pcos_resnet18.onnx` — exported ONNX model (42.61 MB)
-- `pcos_resnet18_quant.onnx` — INT8 dynamically quantized ONNX model (10.69 MB)
-- `cyst_detection_final_savedmodel.h5` — TensorFlow baseline model (169.86 MB)
-- `baseline.md` — TensorFlow baseline metrics
-- `Dockerfile` — inference-only container (onnxruntime + numpy + Pillow only)
-- `run_sandbox.ps1` — PowerShell helper to build and run the Docker edge sandbox
+- `src/`: `clean_data.py` (download + dedupe), `dataset.py` (splits and transforms), `model.py` (grayscale ResNet18), `train.py` (saves `pcos_resnet18.pth`), `benchmark.py`, `evaluate.py` (per-class metrics, confusion matrix, ROC-AUC)
+- `data/test_files.txt`: fixed list of the 401 test filenames and labels
+- `results/metrics.json`: per-class evaluation output (accuracy, P/R/F1, ROC-AUC, latency)
+- `results/confusion_quant.png`: confusion matrix for the INT8 model
+- `pcos_resnet18_production.pth`, `pcos_resnet18.onnx`, `pcos_resnet18_quant.onnx`: model files
+- `baseline.md`: TensorFlow baseline metrics (382-sample hold-out, different split)
+- `Dockerfile`, `run_sandbox.ps1`: edge sandbox
 
 ## Tech stack
 
-Python 3.10 · TensorFlow · PyTorch · torchvision · ONNX Runtime · Docker · KaggleHub
+Python 3.10 · PyTorch · TensorFlow · torchvision · ONNX Runtime · Docker · KaggleHub
