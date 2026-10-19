@@ -1,0 +1,20 @@
+[
+  {
+    "model": "ResNet18 (PyTorch .pth)",
+    "accuracy": 91.52119700748129,
+    "size_mb": 42.69224739074707,
+    "latency_ms": 33.36108799999998
+  },
+  {
+    "model": "ResNet18 ONNX",
+    "accuracy": 91.52119700748129,
+    "size_mb": 42.60702133178711,
+    "latency_ms": 15.41753400000033
+  },
+  {
+    "model": "ResNet18 ONNX quantized",
+    "accuracy": 92.26932668329178,
+    "size_mb": 10.689867973327637,
+    "latency_ms": 4.5487980000007155
+  }
+]
